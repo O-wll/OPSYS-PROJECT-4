@@ -17,6 +17,9 @@
 #define MAX_PROC_TOTAL 20
 #define NANO_TO_SEC 1000000000
 
+const int maxTimeBetweenNewProcsSecs = 1;
+const long maxTimeBetweenNewProcsNano = 100000000;
+
 // Using a structure for our simulated clock, storing seconds and nanoseconds.
 typedef struct SimulatedClock {
         int seconds;
@@ -44,6 +47,8 @@ typedef struct ossMSG {
 void incrementClock(SimulatedClock *clock, int currentProc);
 
 int main(int argc, char **argv) {
+	srand(time(NULL));
+
 	int shmid = shmget(SHM_KEY, sizeof(SimulatedClock), IPC_CREAT | 0666); // Creating shared memory using shmget.
 	if (shmid == -1) { // If shmid is -1 as a result of shmget failing and returning -1, error message will print.
         	printf("Error: OSS shmget failed. \n");
@@ -67,8 +72,13 @@ int main(int argc, char **argv) {
 		printf("Error: OSS shmat failed. \n");
 		exit(1);
 	}
+	memset(processTable, 0, sizeof(PCB) * MAX_PROC); // Allocating memory.
 
-	memset(processTable, 0, sizeof(PCB) * MAX_PROC);
+	int msgid = msgget(MSG_KEY, IPC_CREAT | 0666); // Setting up msg queue.
+	if (msgid == -1) {
+		printf("Error: OSS msgget failed. \n");
+		exit(1);
+	}
 
 	return 0;
 }
