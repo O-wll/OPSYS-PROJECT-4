@@ -12,6 +12,7 @@
 
 #define SHM_KEY 855049
 #define PCB_KEY 866150
+#define MSG_KEY 864049
 #define MAX_PROC 18
 #define MAX_PROC_TOTAL 20
 #define NANO_TO_SEC 1000000000
@@ -34,6 +35,11 @@ typedef struct PCB {
 	int blocked;
 } PCB;
 struct PCB processTable[20];
+
+typedef struct ossMSG {
+	long mtype;
+	int msg;
+} ossMSG;
 
 void incrementClock(SimulatedClock *clock, int currentProc);
 
