@@ -109,10 +109,10 @@ int main(int argc, char **argv) {
 
 	while (totalForked < MAX_PROC) { // Main loop
 		// Unblock any blocked processes if their wait event is up.
-		int ready = 0;
 		for (int i = 0; i < MAX_PCB; i++) {
 			if (processTable[i].occupied && processTable[i].blocked) { // Check for if process is occupied and blocked.
 				// Unblock the process if wait time is up
+				int ready = 0;
 				if (clock->seconds > processTable[i].eventWaitSec) {
                 			ready = 1;
 				}
@@ -140,14 +140,15 @@ int main(int argc, char **argv) {
 			
 			if (freePCB != -1 && totalForked < MAX_PROC) { // Safe guarding against forking anymore children
 				pid = fork();
+
+				if (pid < 0) {
+					printf("Error: fork failed. \n");
+					exit(1);
+				}
+
 				if (pid == 0) {
 					execl("./user", "./user", NULL);
-					
-					if (pid < 0) { // If fork fails
-						printf("Error: Fork Failed");
-						exit(1);
-					}
-					
+						
 				}
 				// Filling PCB entries 
 				processTable[freePCB].occupied = 1;
