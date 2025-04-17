@@ -35,7 +35,7 @@ typedef struct SimulatedClock {
        unsigned int nanoseconds;
 } SimulatedClock;
 
-typedef struct PCB {
+typedef struct PCB { // PCB structure
 	int occupied;
 	pid_t pid;
 	int startSeconds;
@@ -48,18 +48,21 @@ typedef struct PCB {
 } PCB;
 PCB processTable[MAX_PCB];
 
+// Message system
 typedef struct ossMSG {
 	long mtype;
 	int msg;
 } ossMSG;
 
-void incrementClock(SimulatedClock *clock, int addSec, int addNano);
+void incrementClock(SimulatedClock *clock, int addSec, int addNano); // Clock
 
 int main(int argc, char **argv) {
 
 	int totalForked = 0;
+	pid_t pid;
 	unsigned int nextSecFork = 0;
-	unsigned int nextSecNano = 0;
+	unsigned int nextNanoFork = 0;
+	int activeProcs = 0;
 
 	srand(time(NULL));
 
@@ -86,11 +89,180 @@ int main(int argc, char **argv) {
 		printf("Error: OSS msgget failed. \n");
 		exit(1);
 	}
-
-	for (int i = 0; i < MAX_PROC; ++i) {
+	
+	// Initialize the queues
+	for (int i = 0; i < MAX_PROC; ++i) { 
         	highQueue[i] = -1;
         	midQueue[i] = -1;
         	lowQueue[i] = -1;
+	}
+	
+	// Get next random times to fork.
+	nextSecFork = clock->seconds + (rand() % (maxTimeBetweenNewProcsSecs + 1));
+    	nextNanoFork = clock->nanoseconds + (rand() % maxTimeBetweenNewProcsNano);
+    	
+	// Convert nano second to second if necessary.
+	if (nextNanoFork >= NANO_TO_SEC) {
+        	nextSecFork++;
+        	nextNanoFork -= NANO_TO_SEC;
+    	}
+
+	while (totalForked < MAX_PROC) { // Main loop
+	       	if ((clock->seconds > nextSecFork) || (clock->seconds == nextSecFork && clock->nanoseconds >= nextNanoFork)) { // Fork child
+			// Finding a free PCB slot
+			int freePCB = -1;
+			for (int i = 0; i < MAX_PCB; i++) {
+				if (!processTable[i].occupied) {
+					freePCB = i;
+					break;
+                		}	
+			}
+			
+			if (freePCB != -1 && totalForked < MAX_PROC) { // Safe guarding against forking anymore children
+				pid = fork();
+				if (pid == 0) {
+					execl("./user" "./user", NULL);
+					
+					if (pid < 0) { // If fork fails
+						printf("Error: Fork Failed");
+						exit(1);
+					}
+					
+				}
+				// Filling PCB entries 
+				processTable[freePCB].occupied = 1;
+                		processTable[freePCB].pid = pid;
+                		processTable[freePCB].startSeconds = clock->seconds;
+                		processTable[freePCB].startNano = clock->nanoseconds;
+                		processTable[freePCB].blocked = 0;
+
+				// High Priority Queue
+				highQueue[highTail] = freePCB;
+				highTail = (highTail + 1) % MAX_PROC; // When high tail reaches the max process, it'll go back to 0.
+
+				totalForked++;
+				activeProcs++;
+			}
+			
+			// Get new fork times
+			nextSecFork = clock->seconds + (rand() % (maxTimeBetweenNewProcsSecs + 1));
+			nextNanoFork = clock->nanoseconds + (rand() % maxTimeBetweenNewProcsNano);
+			// Conversion
+			if (nextNanoFork >= NANO_TO_SEC) {
+				nextSecFork++;
+				nextNanoFork -= NANO_TO_SEC;
+			}
+		}
+
+		int pcbIndex = -1;
+		int currentQueueLevel = -1;
+
+		// Pulling from queue, if high queue is empty, grab from mid queue, then low queue.
+		if (highHead != highTail) {
+            		pcbIndex = highQueue[highHead];
+            		highHead = (highHead + 1) % MAX_PROC;
+            		currentQueueLevel = 0;
+        	} 
+		else if (midHead != midTail) {
+            		pcbIndex = midQueue[midHead];
+            		midHead = (midHead + 1) % MAX_PROC;
+            		currentQueueLevel = 1;
+        	} 
+		else if (lowHead != lowTail) {
+            		pcbIndex = lowQueue[lowHead];
+            		lowHead = (lowHead + 1) % MAX_PROC;
+            		currentQueueLevel = 2;
+        	}
+
+		if (pcbIndex == -1) { // If no active process, increment clock.
+			unsigned int addSec = nextSecFork - clock->seconds;
+			unsigned int addNano = nextSecFork - clock->nanoseconds;
+			incrementClock(clock, addSec, addNano);
+			continue; // Skip to next loop
+		}
+		
+		// Increasing quantum based on queue priority.
+		int quantum = BASE_QUANTUM_NANO;
+		if (currentQueueLevel == 1) {
+			quantum *= 2;
+		}
+		else if (currentQueueLevel == 2) {
+			quantum *= 4;
+		}
+		
+		// Simulate the time it takes to schedule.
+		incrementClock(clock, 0, 1000);
+
+		// Send message to user process
+		ossMSG sendMSG;
+		sendMSG.mtype = processTable[pcbIndex].pid;
+		sendMSG.msg = quantum;
+		
+		if (msgsnd(msgid, &sendMSG, sizeof(int), 0) == -1) {
+			printf("Error: OSS msgsend failed. \n");
+			exit(1);
+		}
+
+		// Receive msg from user process
+		ossMSG receiveMSG;
+		if (msgrcv(msgid, &receiveMSG, sizeof(int), 1, 0) == -1) {
+			printf("Error: OSS msgrcv failed. \n");
+			exit(1);
+		}
+		// How much time has a user process consumed
+		int timeConsumed = receiveMSG.msg;
+		if (timeConsumed < 0) { // If receiving msg and time is negative, revert it to positive so we can increment clock.
+			timeConsumed = -timeConsumed;
+		}
+		
+		// Increment clock
+		incrementClock(clock, 0, timeConsumed);
+
+		// Update PCB table 
+	        processTable[pcbIndex].serviceTimeNano += timeConsumed;
+        	while (processTable[pcbIndex].serviceTimeNano >= NANO_TO_SEC) { // Convert to seconds if necessary.
+            		processTable[pcbIndex].serviceTimeSeconds++;
+            		processTable[pcbIndex].serviceTimeNano -= NANO_TO_SEC;
+        	}
+
+		// If user process is terminating
+		if (receiveMSG.msg < 0) {
+			waitpid(processTable[pcbIndex].pid, NULL, 0);
+            		memset(&processTable[pcbIndex], 0, sizeof(PCB)); // Data erased since process is terminated, frees up slot.
+            		activeProcs--;
+		}
+		else { // If user process is not terminating
+			if (receiveMSG.msg == quantum) { // If process uses full quantum.
+				if (currentQueueLevel == 0) { // Demote to mid queue
+					midQueue[midTail] = pcbIndex;
+                    			midTail = (midTail + 1) % MAX_PROC;
+				}
+				else if (currentQueueLevel == 1) {
+					lowQueue[lowTail] = pcbIndex;
+					midTail = (midTail + 1) % MAX_PROC;
+				}
+			else { // If process did NOT use full quantum time, re enqueue to high priority
+				highQueue[highTail] = pcbIndex;
+                		highTail = (highTail + 1) % MAX_PROC;			
+			}
+		}
+	}
+
+	// Detach shared memory
+    	if (shmdt(clock) == -1) {
+        	printf("Error: OSS Shared memory detachment failed \n");
+		exit(1);
+    	}	
+
+    	// Remove shared memory
+    	if (shmctl(shmid, IPC_RMID, NULL) == -1) {
+        	printf("Error: Removing memory failed \n");
+		exit(1);
+    	}
+	
+	if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+		printf("Error: Removing msg queue failed. \n");
+		exit(1);
 	}
 
 	return 0;
