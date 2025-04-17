@@ -241,13 +241,13 @@ int main(int argc, char **argv) {
 					lowQueue[lowTail] = pcbIndex;
 					midTail = (midTail + 1) % MAX_PROC;
 				}
+			}
 			else { // If process did NOT use full quantum time, re enqueue to high priority
 				highQueue[highTail] = pcbIndex;
                 		highTail = (highTail + 1) % MAX_PROC;			
 			}
 		}
 	}
-
 	// Detach shared memory
     	if (shmdt(clock) == -1) {
         	printf("Error: OSS Shared memory detachment failed \n");
