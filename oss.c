@@ -108,6 +108,26 @@ int main(int argc, char **argv) {
     	}
 
 	while (totalForked < MAX_PROC) { // Main loop
+		// Unblock any blocked processes if their wait event is up.
+		int ready = 0;
+		for (int i = 0; i < MAX_PCB; i++) {
+			if (processTable[i].occupied && processTable[i].blocked) { // Check for if process is occupied and blocked.
+				// Unblock the process if wait time is up
+				if (clock->seconds > processTable[i].eventWaitSec) {
+                			ready = 1;
+				}
+				else if (clock->seconds == processTable[i].eventWaitSec && clock->nanoseconds >= processTable[i].eventWaitNano) {
+					ready = 1;
+				}
+
+				if (ready) { // If wait time is up, unblock process and re enter into high priority queue
+					processTable[i].blocked = 0;
+                			highQueue[highTail] = i;      
+                			highTail = (highTail + 1) % MAX_PROC;
+				}
+			}
+		}
+
 	       	if ((clock->seconds > nextSecFork) || (clock->seconds == nextSecFork && clock->nanoseconds >= nextNanoFork)) { // Fork child
 			// Finding a free PCB slot
 			int freePCB = -1;
@@ -242,9 +262,18 @@ int main(int argc, char **argv) {
 					lowTail = (lowTail + 1) % MAX_PROC;
 				}
 			}
-			else { // If process did NOT use full quantum time, re enqueue to high priority
-				highQueue[highTail] = pcbIndex;
-                		highTail = (highTail + 1) % MAX_PROC;			
+			else { // Block Process for I/O
+				processTable[pcbIndex].blocked = 1;
+
+				// Simulate some random amount of time to wait.
+				int waitTime = 5000000 + rand() % 5000000;
+    				processTable[pcbIndex].eventWaitSec = clock->seconds;
+    				processTable[pcbIndex].eventWaitNano = clock->nanoseconds + waitTime;
+
+				if (processTable[pcbIndex].eventWaitNano >= NANO_TO_SEC) { // Conversion if necessary 
+					processTable[pcbIndex].eventWaitSec++;
+        				processTable[pcbIndex].eventWaitNano -= NANO_TO_SEC;
+				} 
 			}
 		}
 	}
