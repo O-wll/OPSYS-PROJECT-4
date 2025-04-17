@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
         	nextNanoFork -= NANO_TO_SEC;
     	}
 
-	while (totalForked < MAX_PROC) { // Main loop
+	while (totalForked < MAX_PROC || activeProcs > 0) { // Main loop
 		// Unblock any blocked processes if their wait event is up.
 		for (int i = 0; i < MAX_PCB; i++) {
 			if (processTable[i].occupied && processTable[i].blocked) { // Check for if process is occupied and blocked.
@@ -196,10 +196,19 @@ int main(int argc, char **argv) {
         	}
 
 		if (pcbIndex == -1) { // If no active process, increment clock.
-			unsigned int addSec = nextSecFork - clock->seconds;
-			unsigned int addNano = nextNanoFork - clock->nanoseconds;
-			incrementClock(clock, addSec, addNano);
-			continue; // Skip to next loop
+			unsigned int addSec = 0;
+			unsigned int addNano = 0;
+
+			if (nextNanoFork < clock->nanoseconds) {
+				addSec = nextSecFork - clock->seconds - 1;
+				addNano = (NANO_TO_SEC - clock->nanoseconds) + nextNanoFork;
+			}
+			else {
+				addSec = nextSecFork - clock->seconds;
+				addNano = nextNanoFork - clock->nanoseconds;
+				incrementClock(clock, addSec, addNano);
+				continue; // Skip to next loop
+			}
 		}
 		
 		// Increasing quantum based on queue priority.
@@ -212,7 +221,7 @@ int main(int argc, char **argv) {
 		}
 		
 		// Simulate the time it takes to schedule.
-		incrementClock(clock, 0, 1000);
+		incrementClock(clock, 0, 100 + rand() % 9901);
 
 		// Send message to user process
 		ossMSG sendMSG;
@@ -226,7 +235,7 @@ int main(int argc, char **argv) {
 
 		// Receive msg from user process
 		ossMSG receiveMSG;
-		if (msgrcv(msgid, &receiveMSG, sizeof(int), 1, 0) == -1) {
+		if (msgrcv(msgid, &receiveMSG, sizeof(int), getpid(), 0) == -1) {
 			printf("Error: OSS msgrcv failed. \n");
 			exit(1);
 		}

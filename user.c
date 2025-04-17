@@ -42,7 +42,7 @@ int main(int argc, char **argv) { // Main program
 
 		// Send message to OSS
 		ossMSG sendMSG;
-        	sendMSG.mtype = 1;
+        	sendMSG.mtype = getppid();
         	sendMSG.msg = -timeConsumed;
         	if (msgsnd(msgid, &sendMSG, sizeof(int), 0) == -1) {
         		printf("Error: User msgsnd failed. \n");
@@ -62,7 +62,7 @@ int main(int argc, char **argv) { // Main program
 
 	// Send message to OSS
         ossMSG sendMSG;
-        sendMSG.mtype = 1;
+        sendMSG.mtype = getppid();
         sendMSG.msg = timeConsumed;
         if (msgsnd(msgid, &sendMSG, sizeof(int), 0) == -1) {
 		printf("Error: User msgsnd failed. \n");
