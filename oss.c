@@ -64,8 +64,27 @@ int main(int argc, char **argv) { // Variables
 	unsigned int nextSecFork = 0;
 	unsigned int nextNanoFork = 0;
 	int activeProcs = 0;
+	// For our log file/output
 	FILE *file;
 	int logLines = 0;
+	unsigned int totalWaitTime = 0;
+	unsigned int totalCPUTime = 0;
+	unsigned int totalBlockedTime = 0;
+	unsigned int idleTime = 0;
+	double waitAvg = 0.0;
+	double blockAvg = 0.0;
+	double cpuUsage = 0.0;
+	// For checking how much time has passed.
+	SimulatedClock lastLogged;
+
+	file = fopen("oss.log", "w"); // Open log file
+	if (!file) {
+		printf("Error: failed opening log file. \n");
+		exit(1);
+	}
+	// Initialize clock structure
+	lastLogged.seconds = 0;
+	lastLogged.nanoseconds = 0;
 
 	srand(time(NULL));
 
@@ -171,6 +190,13 @@ int main(int argc, char **argv) { // Variables
 
 				totalForked++;
 				activeProcs++;
+				
+				// Log making of new user process
+				fprintf(file, "OSS: Generating process with PID %d and putting it in queue 0 at time %u:%u\n", pid, clock->seconds, clock->nanoseconds);
+				logLines++;
+				if (logLines >= 10000) {
+					break;
+				}
 			}
 			
 			// Get new fork times
@@ -207,7 +233,7 @@ int main(int argc, char **argv) { // Variables
 			unsigned int addSec = 0;
 			unsigned int addNano = 0;
 
-			if (nextNanoFork < clock->nanoseconds) {
+			if (nextNanoFork < clock->nanoseconds) { 
 				addSec = nextSecFork - clock->seconds - 1;
 				addNano = (NANO_TO_SEC - clock->nanoseconds) + nextNanoFork;
 			}
@@ -216,6 +242,14 @@ int main(int argc, char **argv) { // Variables
 				addNano = nextNanoFork - clock->nanoseconds;
 			}
 			incrementClock(clock, addSec, addNano);
+			// Log idle time of CPU
+			idleTime += addNano;
+			fprintf(file, "OSS: CPU idle at time %u:%u\n", clock->seconds, clock->nanoseconds);
+			logLines++;
+			if (logLines >= 10000) { // Break off main loop if over 10k lines
+				break;
+			}
+
 			continue; // Skip to next loop
 		}
 		
@@ -231,6 +265,10 @@ int main(int argc, char **argv) { // Variables
 		// Simulate the time it takes to schedule.
 		incrementClock(clock, 0, 100 + rand() % 9901);
 
+		// Calculate wait time of processes 
+		unsigned int dispatchWaitTime = (clock->seconds - processTable[pcbIndex].startSeconds) * (NANO_TO_SEC + clock->nanoseconds - processTable[pcbIndex].startNano);
+		totalWaitTime += dispatchWaitTime;
+
 		// Send message to user process
 		ossMSG sendMSG;
 		sendMSG.mtype = processTable[pcbIndex].pid;
@@ -239,6 +277,13 @@ int main(int argc, char **argv) { // Variables
 		if (msgsnd(msgid, &sendMSG, sizeof(int), 0) == -1) {
 			printf("Error: OSS msgsend failed. \n");
 			exit(1);
+		}
+		
+		// Log OSS giving time slice 
+		fprintf(file, "OSS: Dispatching process with PID %d from queue %d at time %u:%u,\n", processTable[pcbIndex].pid, currentQueueLevel, clock->seconds, clock->nanoseconds);
+		logLines++;
+		if (logLines >= 10000) { // Break off loop if log file hits 10k lines
+			break;
 		}
 
 		// Receive msg from user process
@@ -252,9 +297,20 @@ int main(int argc, char **argv) { // Variables
 		if (timeConsumed < 0) { // If receiving msg and time is negative, revert it to positive so we can increment clock.
 			timeConsumed = -timeConsumed;
 		}
-		
+
 		// Increment clock
 		incrementClock(clock, 0, timeConsumed);
+		
+		// Log total time for dispatch 
+		fprintf(file, "OSS: total time this dispatch was %d nanoseconds\n", timeConsumed);
+		fprintf(file, "OSS: Receiving that process with PID %d ran for %d nanoseconds\n", processTable[pcbIndex].pid, timeConsumed);
+		logLines += 2;
+		if (logLines >= 10000) {
+		       	break;
+		}
+
+		// Log total time for CPU time usage
+		totalCPUTime += timeConsumed;
 
 		// Update PCB table 
 	        processTable[pcbIndex].serviceTimeNano += timeConsumed;
@@ -285,6 +341,7 @@ int main(int argc, char **argv) { // Variables
 
 				// Simulate some random amount of time to wait.
 				int waitTime = 5000000 + rand() % 5000000;
+				totalBlockedTime += waitTime; // Add the wait time to totalBlockedTime.
     				processTable[pcbIndex].eventWaitSec = clock->seconds;
     				processTable[pcbIndex].eventWaitNano = clock->nanoseconds + waitTime;
 
@@ -293,6 +350,39 @@ int main(int argc, char **argv) { // Variables
         				processTable[pcbIndex].eventWaitNano -= NANO_TO_SEC;
 				} 
 			}
+		}
+		// Logic to check to see how much time has passed so we can output info at correct interval of 0.5 seconds.
+		unsigned int secsPassed = clock->seconds - lastLogged.seconds;
+		unsigned int nanosPassed = 0;
+		if (clock->nanoseconds >= lastLogged.nanoseconds) { // If nanoseconds does not exceed 1 second 
+			nanosPassed = clock->nanoseconds - lastLogged.nanoseconds;
+		}
+		else { // If nanoseconds DOES exceed one second
+			nanosPassed = NANO_TO_SEC - lastLogged.nanoseconds + clock->nanoseconds;
+		}
+
+		// Check to see if it's been 0.5 seconds simulated time.
+		if (secsPassed > 0 || nanosPassed >= 500000000) { 
+			 fprintf(file, "\nOSS: Process Table at time %u:%u\n", clock->seconds, clock->nanoseconds); // If so, output process table.
+
+			 for (int i = 0; i < MAX_PCB; i++) {
+				 if (processTable[i].occupied) {
+			 		 fprintf(file, "PCB[%d]: PID=%d, Blocked=%d, ServiceTime=%d:%d\n", i, processTable[i].pid, processTable[i].blocked, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano);
+					 logLines++;
+			  		 if (logLines >= 10000) {
+					 	break;
+					 }
+				 }
+			 }
+			 
+			 fprintf(file, "Queues: High[H=%d T=%d], Mid[H=%d T=%d], Low[H=%d T=%d]\n", highHead, highTail, midHead, midTail, lowHead, lowTail);
+			 logLines++;
+			 
+			 if (logLines >= 10000) {
+				 break;
+			 }
+		       	 lastLogged.seconds = clock->seconds;
+		  	 lastLogged.nanoseconds = clock->nanoseconds;
 		}
 	}
 	// Detach shared memory
@@ -307,11 +397,32 @@ int main(int argc, char **argv) { // Variables
 		exit(1);
     	}
 	
+	// Remove message queue
 	if (msgctl(msgid, IPC_RMID, NULL) == -1) {
 		printf("Error: Removing msg queue failed. \n");
 		exit(1);
 	}
 
+	// Summary of program
+	unsigned int totalRunTime = clock->seconds * NANO_TO_SEC + clock->nanoseconds; // Calculate total time the program has been running.
+
+	if (totalForked > 0) { // Calculate average wait and block time per process 
+	     	waitAvg = (double)totalWaitTime / totalForked;
+	       	blockAvg = (double)totalBlockedTime / totalForked;
+	}
+
+	if (totalRunTime > 0) { // Calculating how much of the CPU was used
+	    	cpuUsage = ( (double)totalCPUTime / totalRunTime ) * 100;
+	}
+
+	// Output final summary statistics 
+	fprintf(file, "\n Simulation Summary \n");
+	fprintf(file, "Average wait time: %.2f ns\n", waitAvg);
+	fprintf(file, "Average blocked time: %.2f ns\n", blockAvg);
+	fprintf(file, "CPU utilization: %.2f%%\n", cpuUsage);
+	fprintf(file, "Idle CPU time: %u ns\n", idleTime);
+
+	fclose(file);
 	return 0;
 }
 
@@ -327,14 +438,14 @@ void incrementClock(SimulatedClock *clock, int addSec, int addNano) { // This fu
 
 void signalHandler(int sig) { // Signal handler
        	// Catching signal
-	if (sig == SIGALRM) {
+	if (sig == SIGALRM) { // 60 seconds have passed
 	       	fprintf(stderr, "Alarm signal caught, terminating all processes.\n");
        	}
-     	else if (sig == SIGINT) {
+     	else if (sig == SIGINT) { // Ctrl-C caught
 	       	fprintf(stderr, "Ctrl-C signal caught, terminating all processes.\n");
        	}
 
-	for (int i = 0; i < MAX_PCB; i++) {
+	for (int i = 0; i < MAX_PCB; i++) { // Kill all processes.
 		if (processTable[i].occupied) {
 			kill(processTable[i].pid, SIGTERM);
 	    	}
