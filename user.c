@@ -23,7 +23,7 @@ int main(int argc, char **argv) { // Main program
 
 	// Receive message from OSS
 	ossMSG receiveMSG;
-	if (msgrcv(msgid, &msgRecv, sizeof(int), getpid(), 0) == -1) {
+	if (msgrcv(msgid, &receiveMSG, sizeof(int), getpid(), 0) == -1) {
         	printf("Error: User msgrcv failed. \n");
         	exit(1);
     	}
