@@ -13,7 +13,7 @@
 #define SHM_KEY 855049
 #define PCB_KEY 866150
 #define MSG_KEY 864049
-#define MAX_PROC 18
+#define MAX_PCB 18
 #define MAX_PROC_TOTAL 20
 #define NANO_TO_SEC 1000000000
 #define BASE_QUANTUM_NANO 10000000
@@ -23,8 +23,8 @@ const long maxTimeBetweenNewProcsNano = 100000000;
 
 // Using a structure for our simulated clock, storing seconds and nanoseconds.
 typedef struct SimulatedClock {
-        int seconds;
-        int nanoseconds;
+       unsigned int seconds;
+       unsigned int nanoseconds;
 } SimulatedClock;
 
 typedef struct PCB {
@@ -38,7 +38,6 @@ typedef struct PCB {
 	int eventWaitNano;
 	int blocked;
 } PCB;
-struct PCB processTable[20];
 
 typedef struct ossMSG {
 	long mtype;
@@ -48,6 +47,10 @@ typedef struct ossMSG {
 void incrementClock(SimulatedClock *clock, int addSec, int addNano);
 
 int main(int argc, char **argv) {
+
+	int totalForked = 0;
+	unsigned int nextSecFork = 0;
+	unsigned int nextSec Nano =;
 
 	srand(time(NULL));
 
