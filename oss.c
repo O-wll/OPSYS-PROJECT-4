@@ -60,6 +60,7 @@ void signalHandler(int sig);
 int main(int argc, char **argv) { // Variables
 
 	int totalForked = 0;
+	int pcbIndex = -1;
 	pid_t pid;
 	unsigned int nextSecFork = 0;
 	unsigned int nextNanoFork = 0;
@@ -148,6 +149,10 @@ int main(int argc, char **argv) { // Variables
 				}
 
 				if (ready) { // If wait time is up, unblock process and re enter into high priority queue
+					// Update wait time
+					processTable[pcbIndex].startSeconds = clock->seconds;
+				    	processTable[pcbIndex].startNano = clock->nanoseconds;
+					
 					processTable[i].blocked = 0;
                 			highQueue[highTail] = i;      
                 			highTail = (highTail + 1) % MAX_PROC;
@@ -192,10 +197,9 @@ int main(int argc, char **argv) { // Variables
 				activeProcs++;
 				
 				// Log making of new user process
-				fprintf(file, "OSS: Generating process with PID %d and putting it in queue 0 at time %u:%u\n", pid, clock->seconds, clock->nanoseconds);
-				logLines++;
-				if (logLines >= 10000) {
-					break;
+				if (logLines < 10000) {
+					fprintf(file, "OSS: Generating process with PID %d and putting it in queue 0 at time %u:%u\n", pid, clock->seconds, clock->nanoseconds);
+					logLines++;
 				}
 			}
 			
@@ -209,7 +213,6 @@ int main(int argc, char **argv) { // Variables
 			}
 		}
 
-		int pcbIndex = -1;
 		int currentQueueLevel = -1;
 
 		// Pulling from queue, if high queue is empty, grab from mid queue, then low queue.
@@ -244,10 +247,10 @@ int main(int argc, char **argv) { // Variables
 			incrementClock(clock, addSec, addNano);
 			// Log idle time of CPU
 			idleTime += addNano;
-			fprintf(file, "OSS: CPU idle at time %u:%u\n", clock->seconds, clock->nanoseconds);
-			logLines++;
-			if (logLines >= 10000) { // Break off main loop if over 10k lines
-				break;
+			
+			if (logLines < 10000) {
+				fprintf(file, "OSS: CPU idle at time %u:%u\n", clock->seconds, clock->nanoseconds);
+				logLines++;
 			}
 
 			continue; // Skip to next loop
@@ -265,8 +268,8 @@ int main(int argc, char **argv) { // Variables
 		// Simulate the time it takes to schedule.
 		incrementClock(clock, 0, 100 + rand() % 9901);
 
-		// Calculate wait time of processes 
-		unsigned int dispatchWaitTime = (clock->seconds - processTable[pcbIndex].startSeconds) * (NANO_TO_SEC + clock->nanoseconds - processTable[pcbIndex].startNano);
+		// Calculate wait time of processes.
+		unsigned int dispatchWaitTime = (clock->seconds - processTable[pcbIndex].startSeconds) * NANO_TO_SEC + (clock->nanoseconds - processTable[pcbIndex].startNano);
 		totalWaitTime += dispatchWaitTime;
 
 		// Send message to user process
@@ -280,10 +283,9 @@ int main(int argc, char **argv) { // Variables
 		}
 		
 		// Log OSS giving time slice 
-		fprintf(file, "OSS: Dispatching process with PID %d from queue %d at time %u:%u,\n", processTable[pcbIndex].pid, currentQueueLevel, clock->seconds, clock->nanoseconds);
-		logLines++;
-		if (logLines >= 10000) { // Break off loop if log file hits 10k lines
-			break;
+		if (logLines < 10000) {
+			fprintf(file, "OSS: Dispatching process with PID %d from queue %d at time %u:%u,\n", processTable[pcbIndex].pid, currentQueueLevel, clock->seconds, clock->nanoseconds);
+			logLines++;
 		}
 
 		// Receive msg from user process
@@ -302,11 +304,10 @@ int main(int argc, char **argv) { // Variables
 		incrementClock(clock, 0, timeConsumed);
 		
 		// Log total time for dispatch 
-		fprintf(file, "OSS: total time this dispatch was %d nanoseconds\n", timeConsumed);
-		fprintf(file, "OSS: Receiving that process with PID %d ran for %d nanoseconds\n", processTable[pcbIndex].pid, timeConsumed);
-		logLines += 2;
-		if (logLines >= 10000) {
-		       	break;
+		if (logLines < 10000) {
+			fprintf(file, "OSS: total time this dispatch was %d nanoseconds\n", timeConsumed);
+			fprintf(file, "OSS: Receiving that process with PID %d ran for %d nanoseconds\n", processTable[pcbIndex].pid, timeConsumed);
+			logLines += 2;
 		}
 
 		// Log total time for CPU time usage
@@ -328,10 +329,18 @@ int main(int argc, char **argv) { // Variables
 		else { // If user process is not terminating
 			if (receiveMSG.msg == quantum) { // If process uses full quantum.
 				if (currentQueueLevel == 0) { // Demote to mid queue
+					// Update wait time
+					processTable[pcbIndex].startSeconds = clock->seconds;
+					processTable[pcbIndex].startNano    = clock->nanoseconds;
+					
 					midQueue[midTail] = pcbIndex;
                     			midTail = (midTail + 1) % MAX_PROC;
 				}
 				else if (currentQueueLevel == 1) {
+					// Update wait time
+					processTable[pcbIndex].startSeconds = clock->seconds;
+					processTable[pcbIndex].startNano = clock->nanoseconds;
+
 					lowQueue[lowTail] = pcbIndex;
 					lowTail = (lowTail + 1) % MAX_PROC;
 				}
@@ -364,27 +373,47 @@ int main(int argc, char **argv) { // Variables
 		// Check to see if it's been 0.5 seconds simulated time.
 		if (secsPassed > 0 || nanosPassed >= 500000000) { 
 			 fprintf(file, "\nOSS: Process Table at time %u:%u\n", clock->seconds, clock->nanoseconds); // If so, output process table.
-
 			 for (int i = 0; i < MAX_PCB; i++) {
-				 if (processTable[i].occupied) {
-			 		 fprintf(file, "PCB[%d]: PID=%d, Blocked=%d, ServiceTime=%d:%d\n", i, processTable[i].pid, processTable[i].blocked, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano);
-					 logLines++;
-			  		 if (logLines >= 10000) {
-					 	break;
+				 if (processTable[i].occupied) { // Print info about the PCB slot.
+					 if (logLines < 10000) {
+					 	fprintf(file, "PCB[%d]: PID=%d, Blocked=%d, ServiceTime=%d:%d\n", i, processTable[i].pid, processTable[i].blocked, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano);
+					 	logLines++;
 					 }
 				 }
 			 }
-			 
-			 fprintf(file, "Queues: High[H=%d T=%d], Mid[H=%d T=%d], Low[H=%d T=%d]\n", highHead, highTail, midHead, midTail, lowHead, lowTail);
-			 logLines++;
-			 
-			 if (logLines >= 10000) {
-				 break;
+
+			 // Print about the log queues 
+			 if (logLines < 10000) {
+			 	fprintf(file, "Queues: High[H=%d T=%d], Mid[H=%d T=%d], Low[H=%d T=%d]\n", highHead, highTail, midHead, midTail, lowHead, lowTail);
+			 	logLines++;
 			 }
+
+			 // Keep track of time.
 		       	 lastLogged.seconds = clock->seconds;
 		  	 lastLogged.nanoseconds = clock->nanoseconds;
 		}
 	}
+        // Summary of program
+        unsigned int totalRunTime = clock->seconds * NANO_TO_SEC + clock->nanoseconds; // Calculate total time the program has been running.
+
+        if (totalForked > 0) { // Calculate average wait and block time per process
+                waitAvg = (double)totalWaitTime / totalForked;
+                blockAvg = (double)totalBlockedTime / totalForked;
+        }
+
+        if (totalRunTime > 0) { // Calculating how much of the CPU was used
+                cpuUsage = ( (double)totalCPUTime / totalRunTime ) * 100;
+        }
+
+        // Output final summary statistics
+        fprintf(file, "\n Simulation Summary \n");
+        fprintf(file, "Average wait time: %.2f ns\n", waitAvg);
+        fprintf(file, "Average blocked time: %.2f ns\n", blockAvg);
+        fprintf(file, "CPU utilization: %.2f%%\n", cpuUsage);
+        fprintf(file, "Idle CPU time: %u ns\n", idleTime);
+
+        fclose(file);
+
 	// Detach shared memory
     	if (shmdt(clock) == -1) {
         	printf("Error: OSS Shared memory detachment failed \n");
@@ -403,26 +432,6 @@ int main(int argc, char **argv) { // Variables
 		exit(1);
 	}
 
-	// Summary of program
-	unsigned int totalRunTime = clock->seconds * NANO_TO_SEC + clock->nanoseconds; // Calculate total time the program has been running.
-
-	if (totalForked > 0) { // Calculate average wait and block time per process 
-	     	waitAvg = (double)totalWaitTime / totalForked;
-	       	blockAvg = (double)totalBlockedTime / totalForked;
-	}
-
-	if (totalRunTime > 0) { // Calculating how much of the CPU was used
-	    	cpuUsage = ( (double)totalCPUTime / totalRunTime ) * 100;
-	}
-
-	// Output final summary statistics 
-	fprintf(file, "\n Simulation Summary \n");
-	fprintf(file, "Average wait time: %.2f ns\n", waitAvg);
-	fprintf(file, "Average blocked time: %.2f ns\n", blockAvg);
-	fprintf(file, "CPU utilization: %.2f%%\n", cpuUsage);
-	fprintf(file, "Idle CPU time: %u ns\n", idleTime);
-
-	fclose(file);
 	return 0;
 }
 
