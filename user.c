@@ -17,7 +17,7 @@ int main(int argc, char **argv) { // Main program
 	int quantum = 0;
 	int timeConsumed = 0;
 	
-	srand(time(NULL));
+	srand(time(NULL) * getpid()); // Randomize, since child process may have the same seed, we must do this to ensure that the processes are independent when using rand.
 
 	int msgid = msgget(MSG_KEY, 0666); // Get message from shared memory
 	if (msgid == -1) {
