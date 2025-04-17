@@ -54,7 +54,7 @@ typedef struct ossMSG {
 	int msg;
 } ossMSG;
 
-void incrementClock(SimulatedClock *clock, int addSec, int addNano); // Clock
+void incrementClock(SimulatedClock *clock, int addSec, int addNano); // Clock increment
 
 int main(int argc, char **argv) {
 
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 			if (freePCB != -1 && totalForked < MAX_PROC) { // Safe guarding against forking anymore children
 				pid = fork();
 				if (pid == 0) {
-					execl("./user" "./user", NULL);
+					execl("./user", "./user", NULL);
 					
 					if (pid < 0) { // If fork fails
 						printf("Error: Fork Failed");
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
 
 		if (pcbIndex == -1) { // If no active process, increment clock.
 			unsigned int addSec = nextSecFork - clock->seconds;
-			unsigned int addNano = nextSecFork - clock->nanoseconds;
+			unsigned int addNano = nextNanoFork - clock->nanoseconds;
 			incrementClock(clock, addSec, addNano);
 			continue; // Skip to next loop
 		}
@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
 				}
 				else if (currentQueueLevel == 1) {
 					lowQueue[lowTail] = pcbIndex;
-					midTail = (midTail + 1) % MAX_PROC;
+					lowTail = (lowTail + 1) % MAX_PROC;
 				}
 			}
 			else { // If process did NOT use full quantum time, re enqueue to high priority
