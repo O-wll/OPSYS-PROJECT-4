@@ -14,12 +14,20 @@
 #define PCB_KEY 866150
 #define MSG_KEY 864049
 #define MAX_PCB 18
-#define MAX_PROC_TOTAL 20
+#define MAX_PROC 20
 #define NANO_TO_SEC 1000000000
 #define BASE_QUANTUM_NANO 10000000
 
 const int maxTimeBetweenNewProcsSecs = 1;
 const long maxTimeBetweenNewProcsNano = 100000000;
+
+// Variables for our queue system.
+int highQueue[MAX_PROC];
+int highHead = 0, highTail = 0;
+int midQueue[MAX_PROC];
+int midHead = 0, midTail = 0;
+int lowQueue[MAX_PROC];
+int lowHead = 0, lowTail = 0;
 
 // Using a structure for our simulated clock, storing seconds and nanoseconds.
 typedef struct SimulatedClock {
@@ -38,6 +46,7 @@ typedef struct PCB {
 	int eventWaitNano;
 	int blocked;
 } PCB;
+PCB processTable[MAX_PCB];
 
 typedef struct ossMSG {
 	long mtype;
@@ -50,7 +59,7 @@ int main(int argc, char **argv) {
 
 	int totalForked = 0;
 	unsigned int nextSecFork = 0;
-	unsigned int nextSec Nano =;
+	unsigned int nextSecNano = 0;
 
 	srand(time(NULL));
 
@@ -70,23 +79,18 @@ int main(int argc, char **argv) {
 	clock->seconds = 0;
 	clock->nanoseconds = 0;
 
-	int pcbid = shmget(PCB_KEY, sizeof(PCB) * MAX_PROC, IPC_CREAT | 0666); // Creating shared memory using shmget for PCB.
-	if (pcbid == -1) { // Check for shmget error.
-		printf("Error: OSS shmget failed. \n");
-		exit(1);
-	}
-
-	PCB *pcbTable = (PCB *) shmat(pcbid, NULL, 0); // Attatching shared memory for PCB table.
-	if (pcbTable == (void *)-1) { // Check for shmat error.
-		printf("Error: OSS shmat failed. \n");
-		exit(1);
-	}
-	memset(pcbTable, 0, sizeof(PCB) * MAX_PROC); // Allocating memory.
+	memset(processTable, 0, sizeof(processTable)); // Allocating memory.
 
 	int msgid = msgget(MSG_KEY, IPC_CREAT | 0666); // Setting up msg queue.
 	if (msgid == -1) {
 		printf("Error: OSS msgget failed. \n");
 		exit(1);
+	}
+
+	for (int i = 0; i < MAX_PROC; ++i) {
+        	highQueue[i] = -1;
+        	midQueue[i] = -1;
+        	lowQueue[i] = -1;
 	}
 
 	return 0;
