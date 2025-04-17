@@ -5,13 +5,26 @@
 #include <time.h>
 
 #define MSG_KEY 864049
-#define RANDOM_TERMINATION 5
+#define RANDOM_TERMINATION 5 // Constant for termination of child.
 
-typedef struct ossMSG {
+typedef struct ossMSG { // Message structure
 	long mtype;
 	int msg;
 } ossMSG;
 
-int main(int argc, char **argv) {
-	return 0;
+int main(int argc, char **argv) { // Main program
+	srand(time(NULL));
+
+	int msgid = msgget(MSG_KEY, 0666); // Get message from shared memory
+	if (msgid == -1) {
+        	printf("Error: User msgget failed. \n");
+        	exit(1);
+    	}
+
+	// Receive message from OSS
+	ossMSG receiveMSG;
+	if (msgrcv(msgid, &msgRecv, sizeof(int), getpid(), 0) == -1) {
+        	printf("Error: User msgrcv failed. \n");
+        	exit(1);
+    	}
 }
