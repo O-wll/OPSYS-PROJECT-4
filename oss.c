@@ -55,16 +55,24 @@ typedef struct ossMSG {
 } ossMSG;
 
 void incrementClock(SimulatedClock *clock, int addSec, int addNano); // Clock increment
+void signalHandler(int sig);
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { // Variables
 
 	int totalForked = 0;
 	pid_t pid;
 	unsigned int nextSecFork = 0;
 	unsigned int nextNanoFork = 0;
 	int activeProcs = 0;
+	FILE *file;
+	int logLines = 0;
 
 	srand(time(NULL));
+
+	// Start alarm and set signal.
+	alarm(60);
+	signal(SIGINT, signalHandler);
+	signal(SIGALRM, signalHandler);
 
 	int shmid = shmget(SHM_KEY, sizeof(SimulatedClock), IPC_CREAT | 0666); // Creating shared memory using shmget.
 	if (shmid == -1) { // If shmid is -1 as a result of shmget failing and returning -1, error message will print.
@@ -206,9 +214,9 @@ int main(int argc, char **argv) {
 			else {
 				addSec = nextSecFork - clock->seconds;
 				addNano = nextNanoFork - clock->nanoseconds;
-				incrementClock(clock, addSec, addNano);
-				continue; // Skip to next loop
 			}
+			incrementClock(clock, addSec, addNano);
+			continue; // Skip to next loop
 		}
 		
 		// Increasing quantum based on queue priority.
@@ -315,4 +323,48 @@ void incrementClock(SimulatedClock *clock, int addSec, int addNano) { // This fu
 		clock->seconds++;
         	clock->nanoseconds -= NANO_TO_SEC;
     }
+}
+
+void signalHandler(int sig) { // Signal handler
+       	// Catching signal
+	if (sig == SIGALRM) {
+	       	fprintf(stderr, "Alarm signal caught, terminating all processes.\n");
+       	}
+     	else if (sig == SIGINT) {
+	       	fprintf(stderr, "Ctrl-C signal caught, terminating all processes.\n");
+       	}
+
+	for (int i = 0; i < MAX_PCB; i++) {
+		if (processTable[i].occupied) {
+			kill(processTable[i].pid, SIGTERM);
+	    	}
+	}
+
+	// Cleanup shared memory
+    	int shmid = shmget(SHM_KEY, sizeof(SimulatedClock), 0666);
+    	if (shmid != -1) {
+		SimulatedClock *clock = (SimulatedClock *)shmat(shmid, NULL, 0);
+		if (clock != (void *)-1) { // Detach shared memory
+			if (shmdt(clock) == -1) {
+				printf("Error: OSS Shared memory detachment failed \n");
+				exit(1);
+			}
+		}
+		// Remove shared memory
+		if (shmctl(shmid, IPC_RMID, NULL) == -1) {
+                	printf("Error: Removing memory failed \n");
+                	exit(1);
+        	}
+	}
+
+	// Cleanup message queue
+    	int msgid = msgget(MSG_KEY, 0666);
+    	if (msgid != -1) {
+		if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+		    	printf("Error: Removing msg queue failed. \n");
+		       	exit(1);
+	       	}
+       	}
+
+	exit(1);
 }
