@@ -16,6 +16,7 @@
 #define MAX_PROC 18
 #define MAX_PROC_TOTAL 20
 #define NANO_TO_SEC 1000000000
+#define BASE_QUANTUM_NANO 10000000
 
 const int maxTimeBetweenNewProcsSecs = 1;
 const long maxTimeBetweenNewProcsNano = 100000000;
@@ -44,9 +45,10 @@ typedef struct ossMSG {
 	int msg;
 } ossMSG;
 
-void incrementClock(SimulatedClock *clock, int currentProc);
+void incrementClock(SimulatedClock *clock, int addSec, int addNano);
 
 int main(int argc, char **argv) {
+
 	srand(time(NULL));
 
 	int shmid = shmget(SHM_KEY, sizeof(SimulatedClock), IPC_CREAT | 0666); // Creating shared memory using shmget.
@@ -61,6 +63,10 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	// Initialize clock.
+	clock->seconds = 0;
+	clock->nanoseconds = 0;
+
 	int pcbid = shmget(PCB_KEY, sizeof(PCB) * MAX_PROC, IPC_CREAT | 0666); // Creating shared memory using shmget for PCB.
 	if (pcbid == -1) { // Check for shmget error.
 		printf("Error: OSS shmget failed. \n");
@@ -72,7 +78,7 @@ int main(int argc, char **argv) {
 		printf("Error: OSS shmat failed. \n");
 		exit(1);
 	}
-	memset(processTable, 0, sizeof(PCB) * MAX_PROC); // Allocating memory.
+	memset(pcbTable, 0, sizeof(PCB) * MAX_PROC); // Allocating memory.
 
 	int msgid = msgget(MSG_KEY, IPC_CREAT | 0666); // Setting up msg queue.
 	if (msgid == -1) {
@@ -83,16 +89,12 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-void incrementClock(SimulatedClock *clock, int currentProc) { // This function simulates the increment of our simulated clock.
+void incrementClock(SimulatedClock *clock, int addSec, int addNano) { // This function simulates the increment of our simulated clock.
+	clock->seconds += addSec;
+	clock->nanoseconds += addNano;
 
-	if (currentProc > 0) {
-		clock->nanoseconds += (250 * 1000000) / currentProc;
-	} else {
-		clock->nanoseconds += (250 * 1000000);
-	}
-
-	while (clock->nanoseconds >= NANO_TO_SEC) { // Expect even after reducing nano seconds to have a bit of remaining nano seconds, while ensures that if they build up, that they'll be reduced properly.
+	while (clock->nanoseconds >= NANO_TO_SEC) {
 		clock->seconds++;
-		clock->nanoseconds -= NANO_TO_SEC;
-	}
+        	clock->nanoseconds -= NANO_TO_SEC;
+    }
 }
