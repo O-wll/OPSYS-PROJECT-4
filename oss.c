@@ -150,11 +150,10 @@ int main(int argc, char **argv) { // Variables
 				}
 
 				if (ready) { // If wait time is up, unblock process and re enter into high priority queue
+					processTable[pcbIndex] = 0;
 					// Update wait time
 					processTable[pcbIndex].startSeconds = clock->seconds;
 				    	processTable[pcbIndex].startNano = clock->nanoseconds;
-					
-					processTable[i].blocked = 0;
                 			highQueue[highTail] = i;      
                 			highTail = (highTail + 1) % MAX_PROC;
 				}
@@ -329,11 +328,11 @@ int main(int argc, char **argv) { // Variables
 		}
 		else { // If user process is not terminating
 			if (receiveMSG.msg == quantum) { // If process uses full quantum.
+				// Update time 
+				processTable[pcbIndex].startSeconds = clock->seconds;
+				processTable[pcbIndex].startNano    = clock->nanoseconds;
+
 				if (currentQueueLevel == 0) { // Demote to mid queue
-					// Update wait time
-					processTable[pcbIndex].startSeconds = clock->seconds;
-					processTable[pcbIndex].startNano    = clock->nanoseconds;
-					
 					midQueue[midTail] = pcbIndex;
                     			midTail = (midTail + 1) % MAX_PROC;
 
@@ -344,10 +343,6 @@ int main(int argc, char **argv) { // Variables
 					}
 				}
 				else if (currentQueueLevel == 1) {
-					// Update wait time
-					processTable[pcbIndex].startSeconds = clock->seconds;
-					processTable[pcbIndex].startNano = clock->nanoseconds;
-
 					lowQueue[lowTail] = pcbIndex;
 					lowTail = (lowTail + 1) % MAX_PROC;
 					
