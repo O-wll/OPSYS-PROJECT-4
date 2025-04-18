@@ -15,7 +15,6 @@
 // oss.c is the main program that has a message queue system with three levels, high, mid, and low, and the user processes are randomly generated, gives user processes a time slice, and does the mai noperations such as blocking because of I/O operations and keeps a log of every operation that happens into a log file named oss.log
 
 #define SHM_KEY 855049
-#define PCB_KEY 866150
 #define MSG_KEY 864049
 #define MAX_PCB 18
 #define MAX_PROC 20
