@@ -150,10 +150,10 @@ int main(int argc, char **argv) { // Variables
 				}
 
 				if (ready) { // If wait time is up, unblock process and re enter into high priority queue
-					processTable[pcbIndex].blocked = 0;
+					processTable[i].blocked = 0;
 					// Update wait time
-					processTable[pcbIndex].startSeconds = clock->seconds;
-				    	processTable[pcbIndex].startNano = clock->nanoseconds;
+					processTable[i].startSeconds = clock->seconds;
+				    	processTable[i].startNano = clock->nanoseconds;
                 			highQueue[highTail] = i;      
                 			highTail = (highTail + 1) % MAX_PROC;
 				}
@@ -277,7 +277,7 @@ int main(int argc, char **argv) { // Variables
 		sendMSG.mtype = processTable[pcbIndex].pid;
 		sendMSG.msg = quantum;
 		
-		if (msgsnd(msgid, &sendMSG, sizeof(int), 0) == -1) {
+		if (msgsnd(msgid, &sendMSG, sizeof(sendMSG.msg), 0) == -1) {
 			printf("Error: OSS msgsend failed. \n");
 			exit(1);
 		}
