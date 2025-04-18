@@ -136,6 +136,7 @@ int main(int argc, char **argv) { // Variables
     	}
 
 	while (totalForked < MAX_PROC || activeProcs > 0) { // Main loop
+		pcbIndex = -1;
 		// Unblock any blocked processes if their wait event is up.
 		for (int i = 0; i < MAX_PCB; i++) {
 			if (processTable[i].occupied && processTable[i].blocked) { // Check for if process is occupied and blocked.
@@ -335,6 +336,12 @@ int main(int argc, char **argv) { // Variables
 					
 					midQueue[midTail] = pcbIndex;
                     			midTail = (midTail + 1) % MAX_PROC;
+
+					// Log demotion of progcess
+					if (logLines < 10000) {
+						fprintf(file, "OSS: Putting process with PID %d into queue %d\n", processTable[pcbIndex].pid, currentQueueLevel);
+						logLines++;
+					}
 				}
 				else if (currentQueueLevel == 1) {
 					// Update wait time
@@ -343,6 +350,12 @@ int main(int argc, char **argv) { // Variables
 
 					lowQueue[lowTail] = pcbIndex;
 					lowTail = (lowTail + 1) % MAX_PROC;
+					
+					// Log demotion of process
+					if (logLines < 10000) {
+						fprintf(file, "OSS: Putting process with PID %d into queue %d\n", processTable[pcbIndex].pid, currentQueueLevel);
+                                                logLines++;
+					}
 				}
 			}
 			else { // Block Process for I/O
@@ -372,11 +385,14 @@ int main(int argc, char **argv) { // Variables
 
 		// Check to see if it's been 0.5 seconds simulated time.
 		if (secsPassed > 0 || nanosPassed >= 500000000) { 
-			 fprintf(file, "\nOSS: Process Table at time %u:%u\n", clock->seconds, clock->nanoseconds); // If so, output process table.
-			 for (int i = 0; i < MAX_PCB; i++) {
-				 if (processTable[i].occupied) { // Print info about the PCB slot.
-					 if (logLines < 10000) {
-					 	fprintf(file, "PCB[%d]: PID=%d, Blocked=%d, ServiceTime=%d:%d\n", i, processTable[i].pid, processTable[i].blocked, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano);
+			if (logLines < 10000) {
+				fprintf(file, "\nOSS: Process Table at time %u:%u\n", clock->seconds, clock->nanoseconds); // If so, output process table.
+				logLines++;
+			}
+			for (int i = 0; i < MAX_PCB; i++) {
+				if (processTable[i].occupied) { // Print info about the PCB slot.
+					if (logLines < 10000) {
+						fprintf(file, "PCB[%d]: PID=%d, Blocked=%d, ServiceTime=%d:%d\n", i, processTable[i].pid, processTable[i].blocked, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano);
 					 	logLines++;
 					 }
 				 }
