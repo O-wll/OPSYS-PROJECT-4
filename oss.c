@@ -150,7 +150,7 @@ int main(int argc, char **argv) { // Variables
 				}
 
 				if (ready) { // If wait time is up, unblock process and re enter into high priority queue
-					processTable[pcbIndex] = 0;
+					processTable[pcbIndex].blocked = 0;
 					// Update wait time
 					processTable[pcbIndex].startSeconds = clock->seconds;
 				    	processTable[pcbIndex].startNano = clock->nanoseconds;
