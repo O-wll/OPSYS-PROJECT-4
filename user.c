@@ -4,8 +4,12 @@
 #include <sys/msg.h>
 #include <time.h>
 
+// Author: Dat Nguyen
+// Date: 04/17/2025
+// This program, user.c, is the user process that waits for a message from the main oss system then simulates doing work in the system, randomly terminating at times. Sending a message back to the oss about time spent.
+
 #define MSG_KEY 864049
-#define RANDOM_TERMINATION 5 // Constant for termination of child.
+#define RANDOM_TERMINATION 50 // Constant for termination of child.
 
 typedef struct ossMSG { // Message structure
 	long mtype;
@@ -66,6 +70,13 @@ int main(int argc, char **argv) { // Main program
                 	printf("Error: User msgsnd failed. \n");
                 	exit(1);
         	}
+		
+		if (timeConsumed >= 50000000) { // Terminate if take too long.
+   			 sendMSG.mtype = getppid();
+		     	 sendMSG.msg = -timeConsumed; 
+		     	 msgsnd(msgid,&sendMSG,sizeof(int),0);
+		     	 break;
+		}
 	}
 	return 0;
 }
